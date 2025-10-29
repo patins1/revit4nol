@@ -3,19 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Web.Script.Serialization;
-using Autodesk.Revit.ApplicationServices;
+using System.Text.Json;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 using Ini;
 using System.ComponentModel;
-using System.Windows.Interop;
 using System.Globalization;
 using System.Reflection;
 using System.Collections;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 
 namespace BIMTools
 {
@@ -99,7 +98,7 @@ namespace BIMTools
         ReferencePlane sill;
         ReferencePlane memberLeft, memberRight, startPlaneY, endPlaneY, startPlaneZ, endPlaneZ, centerLeftRight, planeLeft,planeRight,planeFront,planeBack;
         Level levelUpperRefLevel, levelLowerRefLevel;
-        View pView, viewLeft, pViewLowerRefLevel, pViewRefLevel;
+        Autodesk.Revit.DB.View pView, viewLeft, pViewLowerRefLevel, pViewRefLevel;
         //SketchPlane skplane;
         Boolean isStructuralFraming, isColumn;
 
@@ -186,7 +185,7 @@ namespace BIMTools
                 RAASCMSURL = new IniFile(iniPath).IniReadValue("MAIN", "RAASCMSURL");
                 if (RAASCMSURL == "")
                 {
-                    TaskDialog.Show("National Object Library", "RAASCMSURL not defined in " + iniPath + "!");
+                    Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "RAASCMSURL not defined in " + iniPath + "!");
                     return;
                 }
             }
@@ -205,7 +204,7 @@ namespace BIMTools
             string json = param != null ? GetParameterInformation(param, doc) : null;
             if (json != null && json.Length > 0)
             {
-                return getDeserializer().Deserialize<ObjectLibraryResponse>(json);
+                return JsonSerializer.Deserialize<ObjectLibraryResponse>(json, serOptions);
             }
             return null;
         }
@@ -303,22 +302,14 @@ namespace BIMTools
             return p.Replace(',', ' ');
         }
 
-        private JavaScriptSerializer getSerializer()
+            
+        JsonSerializerOptions serOptions =  new JsonSerializerOptions
         {
-            JavaScriptSerializer ser = new JavaScriptSerializer();
-            // allow up to 200mb
-            ser.MaxJsonLength = 200 * 1024 * 1024;
-            ser.RegisterConverters(new JavaScriptConverter[] { new NullPropertiesConverter() });
-            return ser;
-        }
-
-        private JavaScriptSerializer getDeserializer()
-        {
-            JavaScriptSerializer ser = new JavaScriptSerializer(new ManualResolver());
-            // allow up to 200mb
-            ser.MaxJsonLength = 200 * 1024 * 1024;
-            return ser;
-        }
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+            WriteIndented = true,
+            // Converters = { new ShapeConverter() },
+            PropertyNameCaseInsensitive = true
+        };
 
         public void doRequest(ExternalNOLRequest request)
         {
@@ -427,7 +418,7 @@ namespace BIMTools
                     fooInput.proprietaryContent = System.Convert.ToBase64String(contents);
                     fooInput.productLineName = System.IO.Path.GetFileName(lastWrittenFamilyFileName);
                 }
-                string result = getSerializer().Serialize(fooInput);
+                string result = JsonSerializer.Serialize(fooInput, serOptions);
                 System.IO.File.WriteAllText(NOLClient + @"debug\getCurrentProperties.json", result);
                 return result;
             }
@@ -517,10 +508,10 @@ namespace BIMTools
             uiApplication.ActiveUIDocument.RefreshActiveView();
             if (invalElems.Count > 0)
             {
-                TaskDialog.Show("Selection of NOL objects", "Selected " + uiApplication.ActiveUIDocument.Selection.GetElementIds().Count + " errorneously specified NOL objects (from totally " + totalElements + " objects and from totally " + totalNOLElements + " NOL objects)");
+                Autodesk.Revit.UI.TaskDialog.Show("Selection of NOL objects", "Selected " + uiApplication.ActiveUIDocument.Selection.GetElementIds().Count + " errorneously specified NOL objects (from totally " + totalElements + " objects and from totally " + totalNOLElements + " NOL objects)");
                 return;
             }
-            TaskDialog.Show("Selection of NOL objects", "Selected " + uiApplication.ActiveUIDocument.Selection.GetElementIds().Count + " NOL objects (from totally " + totalElements + " objects)");
+            Autodesk.Revit.UI.TaskDialog.Show("Selection of NOL objects", "Selected " + uiApplication.ActiveUIDocument.Selection.GetElementIds().Count + " NOL objects (from totally " + totalElements + " objects)");
         }
 
         private void associateContext(bool fromAllObjects)
@@ -631,14 +622,14 @@ namespace BIMTools
                         }
                         catch (Exception ex)
                         {
-                            TaskDialog.Show("Error", "Cannot import NOL content while being in another active transaction (e.g. the insert mode)! Error message:\n" + ex.Message);
+                            Autodesk.Revit.UI.TaskDialog.Show("Error", "Cannot import NOL content while being in another active transaction (e.g. the insert mode)! Error message:\n" + ex.Message);
                             return;
                         }
                     }
 
                     json = json.Replace("@xsi.type", "__type");
 
-                    ObjectLibraryResponse foo = getDeserializer().Deserialize<ObjectLibraryResponse>(json);
+                    ObjectLibraryResponse foo = JsonSerializer.Deserialize<ObjectLibraryResponse>(json, serOptions);
                     System.IO.File.AppendAllText(NOLClient + @"debug\performance.log", "+++++++ Processing " + foo.productLineName + "\n");
                     measure("Deserialization of RaaS message took ");
 
@@ -674,7 +665,7 @@ namespace BIMTools
                     {
                         if (foo.representationItem.Count == 0)
                         {
-                            TaskDialog.Show("National Object Library", "No geometry data available!");
+                            Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "No geometry data available!");
                             return;
                         }
 
@@ -685,7 +676,7 @@ namespace BIMTools
 
                         if (totalPrimitives == 0)
                         {
-                            TaskDialog.Show("National Object Library", "Could not interpret geometry data!");
+                            Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "Could not interpret geometry data!");
                         }
                         return;
                     }
@@ -856,7 +847,7 @@ namespace BIMTools
                 }
                 Parameter param = elem.get_Parameter(line.name);
                 if (param==null && !onlyExisting) {
-                    param = GetElementParameter(doc, m_revit, "Pset", line.name, ParameterType.Text, false,  BuiltInParameterGroup.PG_IFC, true, elem);
+                    param = GetElementParameter(doc, m_revit, "Pset", line.name, SpecTypeId.String.Text, false,  GroupTypeId.Ifc, true, elem);
                 }
                 if (param != null)
                 {
@@ -880,7 +871,7 @@ namespace BIMTools
                 String msg = (receivedElements - notFound) + " element(s) have been updated.\n";
                 if (notFound >= 1)
                     msg += notFound + " GUIDs could not be found in the CAD model.\n";
-                TaskDialog.Show("National Object Library", msg);
+                Autodesk.Revit.UI.TaskDialog.Show("National Object Library", msg);
             }
             measure("Creating project properties took ");
         }
@@ -893,11 +884,11 @@ namespace BIMTools
                 Parameter param = elem.get_Parameter("NOLBackup");
                 if (param == null)
                 {
-                    param = GetElementParameter(doc, m_revit, "Pset", "NOLBackup", ParameterType.Text, false, BuiltInParameterGroup.PG_IFC, true, elem);
+                    param = GetElementParameter(doc, m_revit, "Pset", "NOLBackup", SpecTypeId.String.Text, false, GroupTypeId.Ifc, true, elem);
                 }
                 if (param != null)
                 {
-                    param.Set(getSerializer().Serialize(backup));
+                    param.Set(JsonSerializer.Serialize(backup, serOptions));
                 }
                 backup = null;
             }
@@ -911,18 +902,18 @@ namespace BIMTools
             trans.Start("Add family parameters");
             foreach (ProductLine line in foo.productLineProperties)
             {
-                //ExternalDefinition definition = RawCreateProjectParameter(doc,m_revit, "Pset", line.name,  ParameterType.Text, true, cats1, BuiltInParameterGroup.PG_IFC, true);
+                //ExternalDefinition definition = RawCreateProjectParameter(doc,m_revit, "Pset", line.name,  SpecTypeId.String.Text, true, cats1, GroupTypeId.Ifc, true);
                 if (doc.FamilyManager.get_Parameter(line.name) == null)
                 {
-                    FamilyParameter param = doc.FamilyManager.AddParameter(line.name, BuiltInParameterGroup.PG_IFC, ParameterType.Text, true);
+                    FamilyParameter param = doc.FamilyManager.AddParameter(line.name, GroupTypeId.Ifc, SpecTypeId.String.Text, true);
                     doc.FamilyManager.Set(param, line.value);
                     backup.productLineProperties.Add((ProductLine) line.Clone());
                 }
             }
             if (doc.FamilyManager.get_Parameter("NOLBackup") == null)
             {
-                FamilyParameter param = doc.FamilyManager.AddParameter("NOLBackup", BuiltInParameterGroup.PG_IFC, ParameterType.Text, true);
-                doc.FamilyManager.Set(param, getSerializer().Serialize(backup));
+                FamilyParameter param = doc.FamilyManager.AddParameter("NOLBackup", GroupTypeId.Ifc, SpecTypeId.String.Text, true);
+                doc.FamilyManager.Set(param, JsonSerializer.Serialize(backup, serOptions));
             }
             measure("Creating family parameters took ");
             trans.Commit();
@@ -982,7 +973,7 @@ namespace BIMTools
             //
             foreach (Autodesk.Revit.DB.Element elem in collector)
             {
-                //TaskDialog.Show("Revit", "Found " + elem.Name + " of type "+elem.Name.GetType().Name);
+                //Autodesk.Revit.UI.TaskDialog.Show("Revit", "Found " + elem.Name + " of type "+elem.Name.GetType().Name);
                 if (elem.Name.Equals(targetName))  // we found it. return this.
                 {
                     return elem;
@@ -990,7 +981,7 @@ namespace BIMTools
             }
 
             ElementId id = collector.FirstElementId();
-            int objid = id.IntegerValue;
+            // int objid = id.IntegerValue;
 
             // cannot find it.
             return null;
@@ -1044,9 +1035,9 @@ namespace BIMTools
             sill = findElement(typeof(ReferencePlane), "Sill", m_familyDocument) as ReferencePlane;
             memberLeft = findElement(typeof(ReferencePlane), "Member Left", m_familyDocument) as ReferencePlane;
             memberRight = findElement(typeof(ReferencePlane), "Member Right", m_familyDocument) as ReferencePlane;
-            pView = findElement(typeof(View), "Front", m_familyDocument) as View;
+            pView = findElement(typeof(Autodesk.Revit.DB.View), "Front", m_familyDocument) as Autodesk.Revit.DB.View;
             centerLeftRight = findElement(typeof(ReferencePlane), "Center (Left/Right)", m_familyDocument) as ReferencePlane;
-            viewLeft = findElement(typeof(View), "Left", m_familyDocument) as View;
+            viewLeft = findElement(typeof(Autodesk.Revit.DB.View), "Left", m_familyDocument) as Autodesk.Revit.DB.View;
             isStructuralFraming = memberLeft != null && memberRight != null && pView != null && viewLeft != null;
             Dimension dimWidth = findDim("Width", m_familyDocument);
             Dimension dimDepth = findDim("Depth", m_familyDocument);
@@ -1055,8 +1046,8 @@ namespace BIMTools
             if (dimHeight == null) dimHeight = findDim("Truss Height", m_familyDocument);
             levelUpperRefLevel = findElement(typeof(Level), "Upper Ref Level", m_familyDocument) as Level;
             levelLowerRefLevel = findElement(typeof(Level), "Lower Ref. Level", m_familyDocument) as Level;
-            pViewLowerRefLevel = findElement(typeof(View), "Lower Ref. Level", m_familyDocument) as View;
-            pViewRefLevel = findElement(typeof(View), "Ref. Level", m_familyDocument) as View; 
+            pViewLowerRefLevel = findElement(typeof(Autodesk.Revit.DB.View), "Lower Ref. Level", m_familyDocument) as Autodesk.Revit.DB.View;
+            pViewRefLevel = findElement(typeof(Autodesk.Revit.DB.View), "Ref. Level", m_familyDocument) as Autodesk.Revit.DB.View; 
             planeLeft = findElement(typeof(ReferencePlane), "Left", m_familyDocument) as ReferencePlane;
             planeRight = findElement(typeof(ReferencePlane), "Right", m_familyDocument) as ReferencePlane;
             planeBack = findElement(typeof(ReferencePlane), "Back", m_familyDocument) as ReferencePlane;
@@ -1096,7 +1087,7 @@ namespace BIMTools
             {
                 m_familyDocument.FamilyManager.Set(dimWidth.FamilyLabel, maxX - minX);
                 m_familyDocument.FamilyManager.Set(dimHeight.FamilyLabel, maxZ - minZ);
-                //TaskDialog.Show("Revit", " mmX=" + (maxX-minX) + " maxX=" + maxX + " minX=" + minX + " offs=" + getOffs() + " dimWidth.Value=" + dimWidth.Value);
+                //Autodesk.Revit.UI.TaskDialog.Show("Revit", " mmX=" + (maxX-minX) + " maxX=" + maxX + " minX=" + minX + " offs=" + getOffs() + " dimWidth.Value=" + dimWidth.Value);
             }
             totalExtrusions = 0;
             totalPolyloops = 0;
@@ -1112,7 +1103,7 @@ namespace BIMTools
 
             if (totalPrimitives == 0)
             {
-                if (!silentMode) TaskDialog.Show("National Object Library", "Properties were downloaded, however no geometry was attached!");
+                if (!silentMode) Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "Properties were downloaded, however no geometry was attached!");
             }
 
             transaction.Commit();
@@ -1121,7 +1112,7 @@ namespace BIMTools
             if (errorneousPrimitives != 0)
             {
                 String msg = errorneousPrimitives + " of totally " + totalPrimitives + " geometry parts of " + foo.productLineName + " were not imported:\n" + errorneousExtrusions + " of totally " + totalExtrusions + " extrusions not accepted by Revit\n" + errorneousPolyloops + " of totally " + totalPolyloops + " faces not accepted by Revit\n" + errorneousUnknownTypes + " not interpreted geometric types" + (oneUnknownType != null ? " e.g. " + oneUnknownType : "");
-                if (!silentMode) TaskDialog.Show("National Object Library", msg);
+                if (!silentMode) Autodesk.Revit.UI.TaskDialog.Show("National Object Library", msg);
                 System.IO.File.WriteAllText(NOLClient + @"debug\buildGeometry.txt", msg);
             }
         }
@@ -1221,13 +1212,13 @@ namespace BIMTools
                         {
                             FamilyInstance familyInstance = elem as FamilyInstance;
 
-                            BuiltInCategory myCatEnum = (BuiltInCategory)familyInstance.Category.Id.IntegerValue;
+                            BuiltInCategory myCatEnum = (BuiltInCategory)familyInstance.Category.Id.Value;
 
                             Dictionary<string, List<FamilySymbol>> winFamilyTypes = FindFamilyTypes(doc, myCatEnum);
 
                             foreach (KeyValuePair<string, List<FamilySymbol>> entry in winFamilyTypes)
                             {
-                                //TaskDialog.Show("Revit", entry.Key + ":" + sGeometryLodFamily);
+                                //Autodesk.Revit.UI.TaskDialog.Show("Revit", entry.Key + ":" + sGeometryLodFamily);
                                 if (sGeometryLodFamily.Equals(entry.Key))
                                 {
                                     foreach (FamilySymbol item in entry.Value)
@@ -1327,7 +1318,7 @@ namespace BIMTools
                             }
                             try
                             {
-                                //TaskDialog.Show("Revit", "n=" + n + " depth=" + mmToFeet(sld.depth) + " depth ori=" + (sld.depth));
+                                //Autodesk.Revit.UI.TaskDialog.Show("Revit", "n=" + n + " depth=" + mmToFeet(sld.depth) + " depth ori=" + (sld.depth));
                                 //printPolyline(n, points, polyline.points);
                                 CreateExtrusion(normal, location, points, voids, sld.depth, m_creationFamily, m_familyDocument, justMeasure);
                             }
@@ -1340,18 +1331,18 @@ namespace BIMTools
                                 {
                                     //try to use normal calculated from the plane containing some points
                                     CreateExtrusion(getNormalFromPolyline(points), location, points, voids, sld.depth, m_creationFamily, m_familyDocument, justMeasure);
-                                    if (!silentMode) TaskDialog.Show("National Object Library", "SUCCESS at " + totalExtrusions + " is \n" + getNormalFromPolyline(points) + " compared to \n" + normal);
+                                    if (!silentMode) Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "SUCCESS at " + totalExtrusions + " is \n" + getNormalFromPolyline(points) + " compared to \n" + normal);
                                 }
                                 catch (Exception)
                                 {
-                                    if (!silentMode) TaskDialog.Show("National Object Library", "FAILURE at " + totalExtrusions + " is \n" + getNormalFromPolyline(points) + " compared to \n" + normal);
+                                    if (!silentMode) Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "FAILURE at " + totalExtrusions + " is \n" + getNormalFromPolyline(points) + " compared to \n" + normal);
                                     if (!silentMode) printPolyline(totalExtrusions, points, polyline.points);
                                 }
 
                             }
                             totalExtrusions++;
                         }
-                        else if (!silentMode) TaskDialog.Show("National Object Library", "got no polyline but a " + profile.outerCurve);
+                        else if (!silentMode) Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "got no polyline but a " + profile.outerCurve);
                     }
                     else
                         if (rectangleProfile != null)
@@ -1377,7 +1368,7 @@ namespace BIMTools
                             }
                             totalExtrusions++;
                         }
-                        else if (!silentMode) TaskDialog.Show("National Object Library", "got no profile but got " + profile);
+                        else if (!silentMode) Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "got no profile but got " + profile);
                 }
                 else
                 {
@@ -1387,9 +1378,9 @@ namespace BIMTools
             }
         }
         
-        private Color toHexColor(IfcColourRgb col, double factor)
+        private Autodesk.Revit.DB.Color toHexColor(IfcColourRgb col, double factor)
         {
-            return new Color(Convert.ToByte(col.red * 0xFF * factor), Convert.ToByte(col.green * 0xFF * factor), Convert.ToByte(col.blue * 0xFF * factor));
+            return new Autodesk.Revit.DB.Color(Convert.ToByte(col.red * 0xFF * factor), Convert.ToByte(col.green * 0xFF * factor), Convert.ToByte(col.blue * 0xFF * factor));
         }
 
 
@@ -1485,7 +1476,7 @@ namespace BIMTools
         {
             foreach (IfcFace face in faceSet.cfsFaces)
             {
-                //TaskDialog.Show("National Object Library", "face.bounds " + face.bounds.Count);
+                //Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "face.bounds " + face.bounds.Count);
                 foreach (IfcFaceBound ifcFaceBound in face.bounds)
                 {
                     IfcPolyLoop polyline = ifcFaceBound.bound as IfcPolyLoop;
@@ -1570,7 +1561,7 @@ namespace BIMTools
             s += " \n points...";
             foreach (XYZ p in points)
                 s += " \n x=" + p.X + " y=" + p.Y + " z=" + p.Z;
-            TaskDialog.Show("National Object Library", "count " + pts.Count + " n=" + n + " \n normal= " + getNormalFromPolyline(points) + " \n original points=" + s);
+            Autodesk.Revit.UI.TaskDialog.Show("National Object Library", "count " + pts.Count + " n=" + n + " \n normal= " + getNormalFromPolyline(points) + " \n original points=" + s);
 
         }
 
@@ -1599,7 +1590,7 @@ namespace BIMTools
                 {
                     String msg = "Found no category for " + foo.productLineName;
                     System.IO.File.WriteAllText(NOLClient+@"debug\buildFamily.txt", msg);
-                    TaskDialog.Show("National Object Library", msg);
+                    Autodesk.Revit.UI.TaskDialog.Show("National Object Library", msg);
                     symbolName = "";
                     fileName = "";
                     return false;
@@ -1636,7 +1627,7 @@ namespace BIMTools
                 {
                     String msg = "Found category " + name + " for " + foo.productLineName + " but found no file " + path;
                     System.IO.File.WriteAllText(NOLClient + @"debug\buildFamily.txt", msg);
-                    TaskDialog.Show("National Object Library", msg);
+                    Autodesk.Revit.UI.TaskDialog.Show("National Object Library", msg);
                     return false;
                 }
                 m_familyDocument = m_revit.NewFamilyDocument(path);
@@ -1816,7 +1807,7 @@ namespace BIMTools
             if (parameter != null)
             {
                 parameter.Set(centerLeftRight.Id);
-                TaskDialog.Show("parameter=", "paam+=" + parameter.AsString());
+                Autodesk.Revit.UI.TaskDialog.Show("parameter=", "paam+=" + parameter.AsString());
             }
             */
             // move to proper place
@@ -1842,7 +1833,7 @@ namespace BIMTools
             }
         }
 
-        private void alignFace(Document m_familyDocument, Extrusion rectExtrusion, XYZ normal, ReferencePlane refPlane, View pView)
+        private void alignFace(Document m_familyDocument, Extrusion rectExtrusion, XYZ normal, ReferencePlane refPlane, Autodesk.Revit.DB.View pView)
         {
             PlanarFace face = findFace(rectExtrusion, normal);
             if (face != null)
@@ -1852,7 +1843,7 @@ namespace BIMTools
             }
         }
 
-        private void alignFace(Document m_familyDocument, Extrusion rectExtrusion, XYZ normal, Level refPlane, View pView)
+        private void alignFace(Document m_familyDocument, Extrusion rectExtrusion, XYZ normal, Level refPlane, Autodesk.Revit.DB.View pView)
         {
             PlanarFace face = findFace(rectExtrusion, normal);
             if (face != null)
@@ -1909,7 +1900,7 @@ namespace BIMTools
 
         void addParamtricDimension(Document m_familyDocument, XYZ td, string viewName, string refCenterName, string startPlaneName, string endPlaneName, string paramName, out ReferencePlane startPlane, out ReferencePlane endPlane, XYZ cutVec)
         {
-            View pViewPlan = findElement(typeof(View), viewName, m_familyDocument) as View;
+            Autodesk.Revit.DB.View pViewPlan = findElement(typeof(Autodesk.Revit.DB.View), viewName, m_familyDocument) as Autodesk.Revit.DB.View;
 
             ReferencePlane refCenter = findElement(typeof(ReferencePlane), refCenterName, m_familyDocument) as ReferencePlane;
 
@@ -1925,7 +1916,7 @@ namespace BIMTools
             refPlane2.Name = startPlaneName;
             startPlane = refPlane2;
 
-            FamilyParameter paramBeamWidth = m_familyDocument.FamilyManager.AddParameter(paramName, BuiltInParameterGroup.PG_GEOMETRY, ParameterType.Length, false);
+            FamilyParameter paramBeamWidth = m_familyDocument.FamilyManager.AddParameter(paramName, GroupTypeId.Geometry, SpecTypeId.Length, false);
             m_familyDocument.FamilyManager.Set(paramBeamWidth, td.X + td.Y + td.Z);
 
             Line pLine = Line.CreateBound(refPlane2.FreeEnd, refPlane.FreeEnd);
@@ -2010,7 +2001,7 @@ namespace BIMTools
         }
 
 
-        public ExternalDefinition RawCreateProjectParameter(Document doc, Application app, string defGroup, string name, ParameterType type, bool visible, BuiltInParameterGroup group, bool inst, Category cat)
+        public ExternalDefinition RawCreateProjectParameter(Document doc, Autodesk.Revit.ApplicationServices.Application app, string defGroup, string name, ForgeTypeId type, bool visible, ForgeTypeId group, bool inst, Category cat)
         {
             ExternalDefinition def = null;
             string oriFile = app.SharedParametersFilename;
@@ -2067,7 +2058,7 @@ namespace BIMTools
             return def;
         }
         
-        public Parameter GetElementParameter(Document doc, Application app, string defGroup, string name, ParameterType type, bool visible, BuiltInParameterGroup group, bool inst, Element elem)
+        public Parameter GetElementParameter(Document doc, Autodesk.Revit.ApplicationServices.Application app, string defGroup, string name, ForgeTypeId type, bool visible, ForgeTypeId group, bool inst, Element elem)
         {
             String realName = name;
             Parameter param = elem==null?null:elem.get_Parameter(realName);
@@ -2093,16 +2084,16 @@ namespace BIMTools
                 case StorageType.ElementId:
                     //find out the name of the elementElementId id = para.AsElementId();
                     ElementId id = para.AsElementId();
-                    if (id.IntegerValue >= 0)
+                    if (id.Value >= 0)
                     {
-                        return document.GetElement(id).Name + "[" + id.IntegerValue.ToString() + "]";
+                        return document.GetElement(id).Name + "[" + id.Value.ToString() + "]";
                     }
                     else
                     {
-                        return id.IntegerValue.ToString();
+                        return id.Value.ToString();
                     }
                 case StorageType.Integer:
-                    if (ParameterType.YesNo == para.Definition.ParameterType)
+                    if (SpecTypeId.Boolean.YesNo == para.Definition.GetDataType())
                     {
                         if (para.AsInteger() == 0)
                         {
@@ -2129,46 +2120,42 @@ namespace BIMTools
     /// <summary>
     /// as __type is missing ,we need to add this
     /// </summary>
-    public class ManualResolver : SimpleTypeResolver
+    public class ManualResolver
     {
-        public ManualResolver() { }
-        public override Type ResolveType(string id)
+        public static Type Resolve(string typeName)
         {
-            Type type = Type.GetType(id);
-            if (type == null)
-            {
-                type = typeof(Object);
-            //    throw new Exception("NOL: Cannot find geometric type " + id);
-            }
-            return type;
+            Type type = Type.GetType(typeName);
+            return type ?? typeof(object); // fallback
+                                           //    throw new Exception("NOL: Cannot find geometric type " + id);
         }
     }
-    
-    public class NullPropertiesConverter : JavaScriptConverter
-    {
-        public override object Deserialize(IDictionary<string, object> dictionary, Type type, JavaScriptSerializer serializer)
-        {
-            throw new NotImplementedException();
-        }
+    // public class ShapeConverter : JsonConverter<Shape>
+    // {
+    //     public override Shape? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    //     {
+    //         // Clone the JSON doc so we can read fields
+    //         using var doc = JsonDocument.ParseValue(ref reader);
+    //         var root = doc.RootElement;
 
-        public override IDictionary<string, object> Serialize(object obj, JavaScriptSerializer serializer)
-        {
-            var jsonExample = new Dictionary<string, object>();
-            foreach (var prop in obj.GetType().GetProperties())
-            {
-                var value = prop.GetValue(obj, BindingFlags.Public, null, null, null);
-                if (value != null && !(value is ICollection && ((ICollection)value).Count == 0))
-                    jsonExample.Add(prop.Name, value);
-            }
+    //         // Read the "type" property from the JSON
+    //         if (!root.TryGetProperty("type", out var typeProperty))
+    //         {
+    //             throw new JsonException("Missing 'type' field.");
+    //         }
 
-            return jsonExample;
-        }
+    //         string typeName = typeProperty.GetString()!;
+    //         Type resolvedType = ManualResolver.Resolve(typeName);
 
-        public override IEnumerable<Type> SupportedTypes
-        {
-            get { return GetType().Assembly.GetTypes(); }
-        }
-    }
+    //         // Deserialize the JSON into the resolved type
+    //         string rawJson = root.GetRawText();
+    //         return (Shape?)JsonSerializer.Deserialize(rawJson, resolvedType, options);
+    //     }
+
+    //     public override void Write(Utf8JsonWriter writer, Shape value, JsonSerializerOptions options)
+    //     {
+    //         JsonSerializer.Serialize(writer, (object)value, value.GetType(), options);
+    //     }
+    // }
 
     public class RoomWarningSwallower : IFailuresPreprocessor
     {

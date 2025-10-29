@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug - Revit 2026 (.NET 8)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "C:\\Program Files\\Autodesk\\Revit 2026\\Revit.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "preLaunchTask": "copy build output to NOL Revit plugin folder"
+    }
+  ]
+}

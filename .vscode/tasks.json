@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "dotnet",
+			"task": "build",
+			"group": "build",
+			"problemMatcher": "$msCompile",
+			"label": "dotnet: build NOL Revit plugin"
+		}
+    {
+			"label": "copy build output to NOL Revit plugin folder",
+			"type": "shell",
+			"command": "xcopy",
+			"args": [
+				"${workspaceFolder}\\NationalObjectLibraryProject\\bin\\Debug\\net8.0-windows\\*",
+				"C:\\bim\\NOLClient\\revit\\plugin\\bin\\Release",
+				"/Y",
+				"/I"
+			],
+			"group": "build",
+			"dependsOn": "dotnet: build"
+		}
+	]
+}
